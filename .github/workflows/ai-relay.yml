@@ -1,0 +1,237 @@
+name: AI Relay
+
+on:
+  repository_dispatch:
+    types: [ai-relay]
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Read request from Gist
+        id: read
+        env:
+          GH_TOKEN: ${{ secrets.RELAY_PAT }}
+          GIST_ID: ${{ github.event.client_payload.gist_id }}
+          REQUEST_ID: ${{ github.event.client_payload.request_id }}
+        run: |
+          set -e
+          echo "Reading gist $GIST_ID (request $REQUEST_ID)..."
+
+          # Fetch gist JSON
+          gist_json=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/gists/$GIST_ID")
+
+          # Extract file content (relay.json) via jq
+          content=$(echo "$gist_json" | jq -r '.files["relay.json"].content')
+
+          if [ -z "$content" ] || [ "$content" = "null" ]; then
+            echo "::error::relay.json content empty"
+            exit 1
+          fi
+
+          # Save full request JSON to file (avoids shell escaping issues)
+          echo "$content" > request.json
+
+          # Verify request_id matches client_payload (sanity check)
+          gist_req_id=$(jq -r '.request_id' request.json)
+          if [ "$gist_req_id" != "$REQUEST_ID" ]; then
+            echo "::warning::gist request_id ($gist_req_id) != dispatch request_id ($REQUEST_ID)"
+          fi
+
+          provider=$(jq -r '.provider' request.json)
+          model=$(jq -r '.model' request.json)
+          echo "Provider: $provider"
+          echo "Model: $model"
+
+          # Export provider/model for next step
+          echo "provider=$provider" >> "$GITHUB_OUTPUT"
+          echo "model=$model" >> "$GITHUB_OUTPUT"
+
+      - name: Call AI API
+        id: call
+        env:
+          PROVIDER: ${{ steps.read.outputs.provider }}
+          MODEL: ${{ steps.read.outputs.model }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          set -e
+
+          case "$PROVIDER" in
+            gemini)
+              if [ -z "$GEMINI_API_KEY" ]; then
+                echo "error:GEMINI_API_KEY not set" > error.txt
+                exit 0
+              fi
+
+              # Convert messages[] to Gemini contents[] format
+              # Gemini uses role: "user" or "model" (not "assistant")
+              jq '{
+                contents: [.messages[] | {
+                  role: (if .role == "assistant" then "model" else "user" end),
+                  parts: [{ text: .content }]
+                }]
+              }' request.json > gemini_body.json
+
+              http_code=$(curl -sS -o gemini_resp.json -w "%{http_code}" \
+                -X POST \
+                -H "Content-Type: application/json" \
+                "https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}" \
+                --data @gemini_body.json)
+
+              if [ "$http_code" != "200" ]; then
+                err=$(jq -r '.error.message // "Gemini API error"' gemini_resp.json 2>/dev/null || echo "HTTP $http_code")
+                echo "error:Gemini API (HTTP $http_code): $err" > error.txt
+                exit 0
+              fi
+
+              # Extract text from candidates[0].content.parts[0].text
+              reply=$(jq -r '.candidates[0].content.parts[0].text // empty' gemini_resp.json)
+              if [ -z "$reply" ]; then
+                echo "error:Gemini returned empty reply" > error.txt
+                exit 0
+              fi
+              printf '%s' "$reply" > reply.txt
+              ;;
+
+            groq)
+              if [ -z "$GROQ_API_KEY" ]; then
+                echo "error:GROQ_API_KEY not set" > error.txt
+                exit 0
+              fi
+
+              # OpenAI-compatible: use messages[] directly (strip timestamp field)
+              jq --arg model "$MODEL" '{
+                model: $model,
+                messages: [.messages[] | { role: .role, content: .content }]
+              }' request.json > groq_body.json
+
+              http_code=$(curl -sS -o groq_resp.json -w "%{http_code}" \
+                -X POST \
+                -H "Authorization: Bearer ${GROQ_API_KEY}" \
+                -H "Content-Type: application/json" \
+                "https://api.groq.com/openai/v1/chat/completions" \
+                --data @groq_body.json)
+
+              if [ "$http_code" != "200" ]; then
+                err=$(jq -r '.error.message // "Groq API error"' groq_resp.json 2>/dev/null || echo "HTTP $http_code")
+                echo "error:Groq API (HTTP $http_code): $err" > error.txt
+                exit 0
+              fi
+
+              reply=$(jq -r '.choices[0].message.content // empty' groq_resp.json)
+              if [ -z "$reply" ]; then
+                echo "error:Groq returned empty reply" > error.txt
+                exit 0
+              fi
+              printf '%s' "$reply" > reply.txt
+              ;;
+
+            deepseek)
+              if [ -z "$DEEPSEEK_API_KEY" ]; then
+                echo "error:DEEPSEEK_API_KEY not set" > error.txt
+                exit 0
+              fi
+
+              # OpenAI-compatible
+              jq --arg model "$MODEL" '{
+                model: $model,
+                messages: [.messages[] | { role: .role, content: .content }]
+              }' request.json > ds_body.json
+
+              http_code=$(curl -sS -o ds_resp.json -w "%{http_code}" \
+                -X POST \
+                -H "Authorization: Bearer ${DEEPSEEK_API_KEY}" \
+                -H "Content-Type: application/json" \
+                "https://api.deepseek.com/chat/completions" \
+                --data @ds_body.json)
+
+              if [ "$http_code" != "200" ]; then
+                err=$(jq -r '.error.message // "DeepSeek API error"' ds_resp.json 2>/dev/null || echo "HTTP $http_code")
+                echo "error:DeepSeek API (HTTP $http_code): $err" > error.txt
+                exit 0
+              fi
+
+              reply=$(jq -r '.choices[0].message.content // empty' ds_resp.json)
+              if [ -z "$reply" ]; then
+                echo "error:DeepSeek returned empty reply" > error.txt
+                exit 0
+              fi
+              printf '%s' "$reply" > reply.txt
+              ;;
+
+            *)
+              echo "error:Unknown provider: $PROVIDER" > error.txt
+              ;;
+          esac
+
+      - name: Write response to Gist
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.RELAY_PAT }}
+          GIST_ID: ${{ github.event.client_payload.gist_id }}
+          REQUEST_ID: ${{ github.event.client_payload.request_id }}
+        run: |
+          set -e
+
+          if [ -f error.txt ]; then
+            err_msg=$(cat error.txt | sed 's/^error://')
+            echo "Writing error response: $err_msg"
+            jq -n \
+              --arg rid "$REQUEST_ID" \
+              --arg err "$err_msg" \
+              --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{
+                status: "error",
+                request_id: $rid,
+                error: $err,
+                completed_at: $now
+              }' > result.json
+          elif [ -f reply.txt ]; then
+            echo "Writing success response ($(wc -c < reply.txt) bytes)"
+            jq -n \
+              --rawfile reply reply.txt \
+              --arg rid "$REQUEST_ID" \
+              --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{
+                status: "completed",
+                request_id: $rid,
+                response: $reply,
+                completed_at: $now
+              }' > result.json
+          else
+            jq -n \
+              --arg rid "$REQUEST_ID" \
+              --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{
+                status: "error",
+                request_id: $rid,
+                error: "Workflow produced no output",
+                completed_at: $now
+              }' > result.json
+          fi
+
+          # Wrap into Gist PATCH payload: { files: { "relay.json": { content: "<json>" } } }
+          jq -n \
+            --rawfile content result.json \
+            '{
+              files: {
+                "relay.json": {
+                  content: $content
+                }
+              }
+            }' > patch_body.json
+
+          curl -sS -X PATCH \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/gists/$GIST_ID" \
+            --data @patch_body.json > /dev/null
+
+          echo "Gist updated."

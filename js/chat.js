@@ -6,6 +6,7 @@ const Chat = (() => {
   let abortController = null;
   let isGenerating = false;
   let currentAiContent = '';
+  let currentMode = null; // 'local' | 'relay'
 
   function loadSession(id) {
     const container = document.getElementById('chat-container');
@@ -51,15 +52,26 @@ const Chat = (() => {
     const aiMsgEl = appendMessageDOM('ai', '', true);
     const bubbleEl = aiMsgEl.querySelector('.message-bubble');
 
-    // Show typing indicator
-    bubbleEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
-
-    // Build messages array for chat API
     const history = Storage.getActiveMessages().map(m => ({
       role: m.role === 'user' ? 'user' : 'assistant',
       content: m.content
     }));
 
+    const selected = getSelectedModel();
+    const { provider, modelId } = Providers.parse(selected);
+
+    if (Providers.isRelay(selected)) {
+      currentMode = 'relay';
+      await sendRelay(provider, modelId, history, aiMsgEl, bubbleEl);
+    } else {
+      currentMode = 'local';
+      bubbleEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+      await sendLocal(modelId, history, aiMsgEl, bubbleEl);
+    }
+  }
+
+  /* --- Local (Ollama streaming) --- */
+  async function sendLocal(modelId, history, aiMsgEl, bubbleEl) {
     abortController = new AbortController();
 
     try {
@@ -67,7 +79,7 @@ const Chat = (() => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: getSelectedModel(),
+          model: modelId,
           messages: history,
           stream: true,
           options: { num_ctx: 4096, num_thread: 4, temperature: 0.7 }
@@ -100,24 +112,18 @@ const Chat = (() => {
         }
       }
 
-      // Save completed message
       Storage.addMessage('assistant', currentAiContent);
-
-      // Add message actions
       addMessageActions(aiMsgEl);
-
-      // Generate follow-up suggestions asynchronously
       generateSuggestions(currentAiContent);
 
     } catch (e) {
       if (e.name === 'AbortError') {
-        // User stopped generation
         if (currentAiContent) {
           Storage.addMessage('assistant', currentAiContent);
           addMessageActions(aiMsgEl);
         }
       } else {
-        bubbleEl.innerHTML = `<span style="color: #e74c3c;">エラー: ${e.message}<br>Ollamaが起動しているか確認してください。</span>`;
+        bubbleEl.innerHTML = `<span style="color: #e74c3c;">エラー: ${escapeHtml(e.message)}<br>Ollamaが起動しているか確認してください。</span>`;
       }
     } finally {
       isGenerating = false;
@@ -126,8 +132,67 @@ const Chat = (() => {
     }
   }
 
+  /* --- Relay (GitHub Actions → external AI) --- */
+  async function sendRelay(provider, modelId, history, aiMsgEl, bubbleEl) {
+    // Show waiting indicator
+    bubbleEl.innerHTML = `
+      <div class="relay-waiting">
+        <div class="relay-spinner"></div>
+        <div class="relay-text">
+          <span>外部AIに問い合わせ中...</span>
+          <span class="relay-timer">0秒</span>
+        </div>
+      </div>
+    `;
+    scrollToBottom();
+    const timerEl = bubbleEl.querySelector('.relay-timer');
+
+    try {
+      if (!Relay.getToken()) {
+        throw new Error('GitHub PAT が未設定です。右上の設定から入力してください。');
+      }
+
+      const { requestId, gistId } = await Relay.send(provider, modelId, history);
+
+      await new Promise((resolve, reject) => {
+        Relay.poll(
+          gistId,
+          requestId,
+          (response) => {
+            currentAiContent = response;
+            bubbleEl.innerHTML = Markdown.render(currentAiContent);
+            scrollToBottom();
+            resolve();
+          },
+          (err) => reject(err),
+          (elapsed) => {
+            if (timerEl) timerEl.textContent = `${elapsed}秒`;
+          }
+        );
+      });
+
+      Storage.addMessage('assistant', currentAiContent);
+      addMessageActions(aiMsgEl);
+      // Follow-up suggestions still use local Ollama (free, fast)
+      generateSuggestions(currentAiContent);
+
+    } catch (e) {
+      bubbleEl.innerHTML = `<span style="color: #e74c3c;">中継エラー: ${escapeHtml(e.message)}</span>`;
+    } finally {
+      isGenerating = false;
+      currentMode = null;
+      toggleButtons(false);
+    }
+  }
+
   function stopGeneration() {
-    if (abortController) {
+    if (currentMode === 'relay') {
+      Relay.cancel();
+      isGenerating = false;
+      currentMode = null;
+      toggleButtons(false);
+      // Keep whatever was already rendered
+    } else if (abortController) {
       abortController.abort();
     }
   }
@@ -219,75 +284,40 @@ const Chat = (() => {
 
     const aiMsgEl = appendMessageDOM('ai', '', true);
     const bubbleEl = aiMsgEl.querySelector('.message-bubble');
-    bubbleEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
 
     const history = Storage.getActiveMessages().map(m => ({
       role: m.role === 'user' ? 'user' : 'assistant',
       content: m.content
     }));
 
-    abortController = new AbortController();
+    const selected = getSelectedModel();
+    const { provider, modelId } = Providers.parse(selected);
 
-    try {
-      const resp = await fetch(`${OLLAMA_BASE}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: getSelectedModel(),
-          messages: history,
-          stream: true,
-          options: { num_ctx: 4096, num_thread: 4, temperature: 0.7 }
-        }),
-        signal: abortController.signal
-      });
-
-      if (!resp.ok) throw new Error(`Ollama API エラー (${resp.status})`);
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n').filter(l => l.trim());
-
-        for (const line of lines) {
-          try {
-            const data = JSON.parse(line);
-            if (data.message && data.message.content) {
-              currentAiContent += data.message.content;
-              bubbleEl.innerHTML = Markdown.render(currentAiContent);
-              scrollToBottom();
-            }
-            if (data.done) break;
-          } catch {}
-        }
-      }
-
-      Storage.addMessage('assistant', currentAiContent);
-      addMessageActions(aiMsgEl);
-      generateSuggestions(currentAiContent);
-
-    } catch (e) {
-      if (e.name === 'AbortError') {
-        if (currentAiContent) {
-          Storage.addMessage('assistant', currentAiContent);
-          addMessageActions(aiMsgEl);
-        }
-      } else {
-        bubbleEl.innerHTML = `<span style="color: #e74c3c;">エラー: ${e.message}</span>`;
-      }
-    } finally {
-      isGenerating = false;
-      abortController = null;
-      toggleButtons(false);
+    if (Providers.isRelay(selected)) {
+      currentMode = 'relay';
+      await sendRelay(provider, modelId, history, aiMsgEl, bubbleEl);
+    } else {
+      currentMode = 'local';
+      bubbleEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+      await sendLocal(modelId, history, aiMsgEl, bubbleEl);
     }
   }
 
-  /* --- Follow-up Suggestions --- */
+  /* --- Follow-up Suggestions (always via local Ollama) --- */
   async function generateSuggestions(aiResponse) {
+    // Pick a local model — prefer currently selected if local, else first local option
+    const select = document.getElementById('model-select');
+    let localModelId = null;
+    const selected = getSelectedModel();
+    if (Providers.isLocal(selected)) {
+      localModelId = Providers.parse(selected).modelId;
+    } else {
+      // Find first local option
+      const localOpt = select.querySelector('optgroup option[value^="local:"]');
+      if (localOpt) localModelId = Providers.parse(localOpt.value).modelId;
+    }
+    if (!localModelId) return; // No local model available, skip suggestions
+
     const messages = Storage.getActiveMessages();
     // Build a short context from last few messages
     const context = messages.slice(-4).map(m =>
@@ -299,7 +329,7 @@ const Chat = (() => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: getSelectedModel(),
+          model: localModelId,
           prompt: `以下の会話に基づいて、ユーザーが次に聞きそうな質問を2〜3個、簡潔に日本語で生成してください。各質問は20文字以内にしてください。JSON配列のみを返してください。例: ["質問1", "質問2", "質問3"]\n\n会話:\n${context}`,
           stream: false,
           options: { temperature: 0.8, num_ctx: 2048 }

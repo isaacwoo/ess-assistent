@@ -719,3 +719,180 @@ body {
   width: 100%;
   outline: none;
 }
+
+/* ========================================
+   Model select optgroup
+   ======================================== */
+.model-select optgroup {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+.model-select option {
+  font-weight: normal;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  padding: 4px 6px;
+}
+
+/* ========================================
+   Settings Modal
+   ======================================== */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal.is-open {
+  display: flex;
+}
+.modal-content {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.modal-body {
+  padding: 20px;
+}
+.modal-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.modal-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0 0 10px 0;
+  line-height: 1.6;
+}
+.modal-hint code {
+  background: var(--bg-tertiary);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.modal-input {
+  width: 100%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  outline: none;
+  box-sizing: border-box;
+}
+.modal-input:focus {
+  border-color: var(--accent);
+}
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.modal-btn {
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 13px;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  transition: background 0.15s, border-color 0.15s;
+}
+.modal-btn:hover {
+  background: var(--bg-tertiary);
+}
+.modal-btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.modal-btn-primary:hover {
+  filter: brightness(1.1);
+  background: var(--accent);
+}
+.modal-btn-secondary {
+  /* default */
+}
+.modal-btn-danger {
+  color: #e74c3c;
+  border-color: rgba(231, 76, 60, 0.3);
+}
+.modal-btn-danger:hover {
+  background: rgba(231, 76, 60, 0.1);
+}
+.settings-status {
+  margin-top: 12px;
+  font-size: 12px;
+  min-height: 16px;
+  color: var(--text-secondary);
+}
+.settings-status.success {
+  color: #2ecc71;
+}
+.settings-status.error {
+  color: #e74c3c;
+}
+
+/* ========================================
+   Relay waiting indicator
+   ======================================== */
+.relay-waiting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px;
+  color: var(--text-secondary);
+}
+.relay-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: relay-spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes relay-spin {
+  to { transform: rotate(360deg); }
+}
+.relay-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+.relay-timer {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-tertiary, var(--text-secondary));
+  opacity: 0.7;
+}
