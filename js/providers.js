@@ -13,10 +13,9 @@ const Providers = (() => {
       name: 'Gemini',
       type: 'relay',
       models: [
-        { id: 'gemini-3-flash-preview',          name: 'Gemini 3 Flash' },
-        { id: 'gemini-2.5-flash',                name: 'Gemini 2.5 Flash' },
-        { id: 'gemma-4-31b-it',                  name: 'Gemma 4 31B' },
-        { id: 'gemini-3.1-flash-image-preview',  name: 'Nano Banana 2 (画像)' }
+        { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash' },
+        { id: 'gemini-2.5-flash',       name: 'Gemini 2.5 Flash' },
+        { id: 'gemma-4-31b-it',         name: 'Gemma 4 31B' }
       ]
     },
     groq: {
