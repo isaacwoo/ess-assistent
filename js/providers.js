@@ -14,7 +14,8 @@ const Providers = (() => {
       type: 'relay',
       models: [
         { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash' },
-        { id: 'gemini-2.5-flash',       name: 'Gemini 2.5 Flash' }
+        { id: 'gemini-2.5-flash',       name: 'Gemini 2.5 Flash' },
+        { id: 'gemma-4-31b-it',         name: 'Gemma 4 31B' }
       ]
     },
     groq: {
