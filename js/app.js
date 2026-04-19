@@ -209,7 +209,7 @@ async function initModelSelect() {
   // --- External providers (only if PAT configured) ---
   const hasPAT = !!localStorage.getItem('ess-github-pat');
   if (hasPAT) {
-    ['gemini', 'groq', 'deepseek'].forEach(pKey => {
+    ['gemini', 'groq', 'deepseek', 'kimi'].forEach(pKey => {
       const p = Providers.PROVIDERS[pKey];
       if (!p || !p.models.length) return;
       const group = document.createElement('optgroup');
