@@ -34,6 +34,15 @@ const Providers = (() => {
         { id: 'deepseek-chat', name: 'DeepSeek V3' },
         { id: 'deepseek-reasoner', name: 'DeepSeek R1' }
       ]
+    },
+    kimi: {
+      name: 'Kimi',
+      type: 'relay',
+      models: [
+        { id: 'moonshot-v1-8k',   name: 'Kimi 8K' },
+        { id: 'moonshot-v1-32k',  name: 'Kimi 32K' },
+        { id: 'moonshot-v1-128k', name: 'Kimi 128K' }
+      ]
     }
   };
 

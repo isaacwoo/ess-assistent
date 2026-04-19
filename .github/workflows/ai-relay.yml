@@ -59,6 +59,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
         run: |
           set -e
 
@@ -201,6 +202,51 @@ jobs:
               reply=$(jq -r '.choices[0].message.content // empty' ds_resp.json)
               if [ -z "$reply" ]; then
                 echo "error:DeepSeek returned empty reply" > error.txt
+                exit 0
+              fi
+              printf '%s' "$reply" > reply.txt
+              ;;
+
+            kimi)
+              if [ -z "$KIMI_API_KEY" ]; then
+                echo "error:KIMI_API_KEY not set" > error.txt
+                exit 0
+              fi
+
+              jq --arg model "$MODEL" '{
+                model: $model,
+                messages: [.messages[] | { role: .role, content: .content }]
+              }' request.json > kimi_body_base.json
+
+              has_image=$(jq -r 'if .image and .image.data then "true" else "false" end' request.json)
+              if [ "$has_image" = "true" ]; then
+                jq -r '.image.data' request.json > img_data.txt
+                image_mime=$(jq -r '.image.mimeType // "image/jpeg"' request.json)
+                jq --rawfile imgdata img_data.txt --arg mime "$image_mime" \
+                '.messages[-1].content = [
+                  {"type":"text","text":.messages[-1].content},
+                  {"type":"image_url","image_url":{"url":("data:" + $mime + ";base64," + ($imgdata | rtrimstr("\n")))}}
+                ]' kimi_body_base.json > kimi_body.json
+              else
+                mv kimi_body_base.json kimi_body.json
+              fi
+
+              http_code=$(curl -sS -o kimi_resp.json -w "%{http_code}" \
+                -X POST \
+                -H "Authorization: Bearer ${KIMI_API_KEY}" \
+                -H "Content-Type: application/json" \
+                "https://api.moonshot.cn/v1/chat/completions" \
+                --data @kimi_body.json)
+
+              if [ "$http_code" != "200" ]; then
+                err=$(jq -r '.error.message // "Kimi API error"' kimi_resp.json 2>/dev/null || echo "HTTP $http_code")
+                echo "error:Kimi API (HTTP $http_code): $err" > error.txt
+                exit 0
+              fi
+
+              reply=$(jq -r '.choices[0].message.content // empty' kimi_resp.json)
+              if [ -z "$reply" ]; then
+                echo "error:Kimi returned empty reply" > error.txt
                 exit 0
               fi
               printf '%s' "$reply" > reply.txt
