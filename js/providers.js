@@ -39,6 +39,7 @@ const Providers = (() => {
       name: 'Kimi',
       type: 'relay',
       models: [
+        { id: 'kimi-k2.5',        name: 'Kimi K2.5' },
         { id: 'moonshot-v1-8k',   name: 'Kimi 8K' },
         { id: 'moonshot-v1-32k',  name: 'Kimi 32K' },
         { id: 'moonshot-v1-128k', name: 'Kimi 128K' }
