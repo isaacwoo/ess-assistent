@@ -896,3 +896,67 @@ body {
   color: var(--text-tertiary, var(--text-secondary));
   opacity: 0.7;
 }
+
+/* ========================================
+   Image upload
+   ======================================== */
+.image-attach-btn {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+.image-attach-btn:hover {
+  color: var(--accent);
+}
+.image-attach-btn.has-image {
+  color: var(--accent);
+}
+
+/* Preview strip above the textarea */
+.image-preview-area {
+  padding: 6px 16px 2px;
+}
+.image-preview-inner {
+  position: relative;
+  display: inline-block;
+}
+.image-preview-thumb {
+  display: block;
+  height: 72px;
+  width: auto;
+  max-width: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.image-remove-btn {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+.image-remove-btn:hover {
+  background: #e74c3c;
+  color: #fff;
+  border-color: #e74c3c;
+}
+
+/* Image thumbnail inside a user message bubble */
+.msg-image-thumb {
+  display: block;
+  max-width: 280px;
+  max-height: 200px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  object-fit: contain;
+}

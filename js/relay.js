@@ -154,9 +154,10 @@ const Relay = (() => {
 
   /**
    * 发送中继请求
+   * @param {object|null} image - { data: base64, mimeType: 'image/jpeg' } or null
    * @returns {Promise<{requestId, gistId}>}
    */
-  async function send(provider, model, messages) {
+  async function send(provider, model, messages, image) {
     cancelled = false;
 
     // 只发送最近 10 条消息以控制大小
@@ -171,6 +172,7 @@ const Relay = (() => {
       provider,
       model,
       messages: recentMessages,
+      image: image ? { data: image.data, mimeType: image.mimeType } : null,
       response: null,
       error: null,
       created_at: new Date().toISOString()

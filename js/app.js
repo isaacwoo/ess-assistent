@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initSidebar();
   initInput();
+  initImageUpload();
   initModelSelect();
   initSettings();
   Storage.init();
@@ -90,6 +91,76 @@ function initInput() {
 
   document.getElementById('stop-btn').addEventListener('click', () => {
     Chat.stopGeneration();
+  });
+}
+
+/* --- Image Upload --- */
+function initImageUpload() {
+  const imageInput = document.getElementById('image-input');
+  const imageBtn   = document.getElementById('image-btn');
+  const removeBtn  = document.getElementById('image-remove-btn');
+  const previewArea = document.getElementById('image-preview-area');
+  const thumb       = document.getElementById('image-preview-thumb');
+
+  imageBtn.addEventListener('click', () => imageInput.click());
+
+  imageInput.addEventListener('change', async () => {
+    const file = imageInput.files[0];
+    if (!file) return;
+    imageInput.value = ''; // reset so same file can be re-selected
+
+    try {
+      const result = await resizeImageToBase64(file);
+      Chat.setImage(result);
+      thumb.src = result.dataUrl;
+      previewArea.style.display = '';
+      imageBtn.classList.add('has-image');
+    } catch (e) {
+      console.error('Image load failed:', e);
+    }
+  });
+
+  removeBtn.addEventListener('click', () => {
+    Chat.clearImage();
+    thumb.src = '';
+    previewArea.style.display = 'none';
+    imageBtn.classList.remove('has-image');
+  });
+}
+
+// Resize image to max 1024px and return { data, mimeType, dataUrl }
+function resizeImageToBase64(file, maxSize = 1024) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxSize || height > maxSize) {
+          if (width >= height) {
+            height = Math.round(height * maxSize / width);
+            width = maxSize;
+          } else {
+            width = Math.round(width * maxSize / height);
+            height = maxSize;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        resolve({
+          data: dataUrl.split(',')[1], // base64 only
+          mimeType: 'image/jpeg',
+          dataUrl
+        });
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
   });
 }
 

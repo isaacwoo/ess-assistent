@@ -76,7 +76,20 @@ jobs:
                   role: (if .role == "assistant" then "model" else "user" end),
                   parts: [{ text: .content }]
                 }]
-              }' request.json > gemini_body.json
+              }' request.json > gemini_body_base.json
+
+              # If image present, append inline_data to the last content's parts
+              has_image=$(jq -r 'if .image and .image.data then "true" else "false" end' request.json)
+              if [ "$has_image" = "true" ]; then
+                jq -r '.image.data' request.json > img_data.txt
+                image_mime=$(jq -r '.image.mimeType // "image/jpeg"' request.json)
+                jq --rawfile imgdata img_data.txt \
+                   --arg mime "$image_mime" \
+                '.contents[-1].parts += [{"inline_data": {"mime_type": $mime, "data": ($imgdata | rtrimstr("\n"))}}]' \
+                gemini_body_base.json > gemini_body.json
+              else
+                mv gemini_body_base.json gemini_body.json
+              fi
 
               http_code=$(curl -sS -o gemini_resp.json -w "%{http_code}" \
                 -X POST \
@@ -109,7 +122,21 @@ jobs:
               jq --arg model "$MODEL" '{
                 model: $model,
                 messages: [.messages[] | { role: .role, content: .content }]
-              }' request.json > groq_body.json
+              }' request.json > groq_body_base.json
+
+              # If image present, convert last user message content to array format
+              has_image=$(jq -r 'if .image and .image.data then "true" else "false" end' request.json)
+              if [ "$has_image" = "true" ]; then
+                jq -r '.image.data' request.json > img_data.txt
+                image_mime=$(jq -r '.image.mimeType // "image/jpeg"' request.json)
+                jq --rawfile imgdata img_data.txt --arg mime "$image_mime" \
+                '.messages[-1].content = [
+                  {"type":"text","text":.messages[-1].content},
+                  {"type":"image_url","image_url":{"url":("data:" + $mime + ";base64," + ($imgdata | rtrimstr("\n")))}}
+                ]' groq_body_base.json > groq_body.json
+              else
+                mv groq_body_base.json groq_body.json
+              fi
 
               http_code=$(curl -sS -o groq_resp.json -w "%{http_code}" \
                 -X POST \
@@ -142,7 +169,21 @@ jobs:
               jq --arg model "$MODEL" '{
                 model: $model,
                 messages: [.messages[] | { role: .role, content: .content }]
-              }' request.json > ds_body.json
+              }' request.json > ds_body_base.json
+
+              # If image present, convert last user message content to array format
+              has_image=$(jq -r 'if .image and .image.data then "true" else "false" end' request.json)
+              if [ "$has_image" = "true" ]; then
+                jq -r '.image.data' request.json > img_data.txt
+                image_mime=$(jq -r '.image.mimeType // "image/jpeg"' request.json)
+                jq --rawfile imgdata img_data.txt --arg mime "$image_mime" \
+                '.messages[-1].content = [
+                  {"type":"text","text":.messages[-1].content},
+                  {"type":"image_url","image_url":{"url":("data:" + $mime + ";base64," + ($imgdata | rtrimstr("\n")))}}
+                ]' ds_body_base.json > ds_body.json
+              else
+                mv ds_body_base.json ds_body.json
+              fi
 
               http_code=$(curl -sS -o ds_resp.json -w "%{http_code}" \
                 -X POST \

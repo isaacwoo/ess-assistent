@@ -7,6 +7,17 @@ const Chat = (() => {
   let isGenerating = false;
   let currentAiContent = '';
   let currentMode = null; // 'local' | 'relay'
+  let pendingImage = null; // { data, mimeType, dataUrl }
+
+  function setImage(img) { pendingImage = img; }
+  function clearImage() {
+    pendingImage = null;
+    // Also reset the UI
+    const area = document.getElementById('image-preview-area');
+    const btn  = document.getElementById('image-btn');
+    if (area) area.style.display = 'none';
+    if (btn)  btn.classList.remove('has-image');
+  }
 
   function loadSession(id) {
     const container = document.getElementById('chat-container');
@@ -38,9 +49,13 @@ const Chat = (() => {
     // Remove any existing suggestions
     document.querySelectorAll('.suggestions').forEach(el => el.remove());
 
+    // Capture image before any DOM changes
+    const imageToSend = pendingImage;
+    clearImage();
+
     // Add user message
     Storage.addMessage('user', text);
-    appendMessageDOM('user', text);
+    appendMessageDOM('user', text, false, imageToSend ? imageToSend.dataUrl : null);
     input.value = '';
     input.style.height = 'auto';
 
@@ -62,17 +77,25 @@ const Chat = (() => {
 
     if (Providers.isRelay(selected)) {
       currentMode = 'relay';
-      await sendRelay(provider, modelId, history, aiMsgEl, bubbleEl);
+      await sendRelay(provider, modelId, history, aiMsgEl, bubbleEl, imageToSend);
     } else {
       currentMode = 'local';
       bubbleEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
-      await sendLocal(modelId, history, aiMsgEl, bubbleEl);
+      await sendLocal(modelId, history, aiMsgEl, bubbleEl, imageToSend);
     }
   }
 
   /* --- Local (Ollama streaming) --- */
-  async function sendLocal(modelId, history, aiMsgEl, bubbleEl) {
+  async function sendLocal(modelId, history, aiMsgEl, bubbleEl, image) {
     abortController = new AbortController();
+
+    // Attach image to the last user message (Ollama multimodal format)
+    const ollamaHistory = history.map((m, i) => {
+      if (image && i === history.length - 1 && m.role === 'user') {
+        return { ...m, images: [image.data] };
+      }
+      return m;
+    });
 
     try {
       const resp = await fetch(`${OLLAMA_BASE}/api/chat`, {
@@ -80,7 +103,7 @@ const Chat = (() => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: modelId,
-          messages: history,
+          messages: ollamaHistory,
           stream: true,
           options: { num_ctx: 4096, num_thread: 4, temperature: 0.7 }
         }),
@@ -133,7 +156,7 @@ const Chat = (() => {
   }
 
   /* --- Relay (GitHub Actions → external AI) --- */
-  async function sendRelay(provider, modelId, history, aiMsgEl, bubbleEl) {
+  async function sendRelay(provider, modelId, history, aiMsgEl, bubbleEl, image) {
     // Show waiting indicator
     bubbleEl.innerHTML = `
       <div class="relay-waiting">
@@ -152,7 +175,7 @@ const Chat = (() => {
         throw new Error('GitHub PAT が未設定です。右上の設定から入力してください。');
       }
 
-      const { requestId, gistId } = await Relay.send(provider, modelId, history);
+      const { requestId, gistId } = await Relay.send(provider, modelId, history, image);
 
       await new Promise((resolve, reject) => {
         Relay.poll(
@@ -197,14 +220,21 @@ const Chat = (() => {
     }
   }
 
-  function appendMessageDOM(role, content, isStreaming) {
+  function appendMessageDOM(role, content, isStreaming, imageDataUrl) {
     const container = document.getElementById('chat-container');
     const div = document.createElement('div');
     div.className = `message message-${role === 'user' ? 'user' : 'ai'}`;
 
     const label = role === 'user' ? '' : '<div class="message-label">ESS ASSISTENT</div>';
-    const bubbleContent = role === 'user' ? escapeHtml(content) :
-      (content ? Markdown.render(content) : '');
+    let bubbleContent;
+    if (role === 'user') {
+      const imgHtml = imageDataUrl
+        ? `<img class="msg-image-thumb" src="${imageDataUrl}" alt="添付画像">`
+        : '';
+      bubbleContent = imgHtml + escapeHtml(content);
+    } else {
+      bubbleContent = content ? Markdown.render(content) : '';
+    }
 
     div.innerHTML = `
       ${label}
@@ -396,5 +426,5 @@ const Chat = (() => {
     return div.innerHTML;
   }
 
-  return { send, loadSession, stopGeneration };
+  return { send, loadSession, stopGeneration, setImage, clearImage };
 })();
