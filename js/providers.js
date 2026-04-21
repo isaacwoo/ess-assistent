@@ -27,22 +27,15 @@ const Providers = (() => {
         { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B' }
       ]
     },
-    deepseek: {
-      name: 'DeepSeek',
+    openai: {
+      name: 'OpenAI',
       type: 'relay',
       models: [
-        { id: 'deepseek-chat', name: 'DeepSeek V3' },
-        { id: 'deepseek-reasoner', name: 'DeepSeek R1' }
-      ]
-    },
-    kimi: {
-      name: 'Kimi',
-      type: 'relay',
-      models: [
-        { id: 'kimi-k2.5',        name: 'Kimi K2.5' },
-        { id: 'moonshot-v1-8k',   name: 'Kimi 8K' },
-        { id: 'moonshot-v1-32k',  name: 'Kimi 32K' },
-        { id: 'moonshot-v1-128k', name: 'Kimi 128K' }
+        { id: 'gpt-4.1',       name: 'GPT-4.1' },
+        { id: 'gpt-4.1-mini',  name: 'GPT-4.1 Mini' },
+        { id: 'gpt-4o',        name: 'GPT-4o' },
+        { id: 'gpt-4o-mini',   name: 'GPT-4o Mini' },
+        { id: 'o4-mini',       name: 'o4 Mini' }
       ]
     }
   };
