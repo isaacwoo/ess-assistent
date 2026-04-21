@@ -110,7 +110,7 @@
 
   <!-- Settings modal -->
   <div id="settings-modal" class="modal">
-    <div class="modal-content">
+    <div class="modal-content settings-modal-wide">
       <div class="modal-header">
         <h3>設定</h3>
         <button id="settings-close-btn" class="icon-btn" title="閉じる">
@@ -118,15 +118,29 @@
         </button>
       </div>
       <div class="modal-body">
-        <label class="modal-label">GitHub PAT (外部AI中継用)</label>
-        <p class="modal-hint">外部AI (Gemini/Groq/DeepSeek) を利用するにはGitHub Personal Access Tokenが必要です。<br>スコープ: <code>repo</code> + <code>gist</code></p>
-        <input id="settings-pat-input" type="password" class="modal-input" placeholder="ghp_xxxxxxxxxxxx" autocomplete="off">
-        <div class="modal-actions">
-          <button id="settings-test-btn" class="modal-btn modal-btn-secondary">接続テスト</button>
-          <button id="settings-save-btn" class="modal-btn modal-btn-primary">保存</button>
-          <button id="settings-clear-btn" class="modal-btn modal-btn-danger">削除</button>
+
+        <!-- GitHub PAT section -->
+        <div class="settings-section">
+          <div class="settings-section-title">GitHub PAT（中継必須）</div>
+          <p class="modal-hint">外部AIリレーに必要です。スコープ: <code>repo</code> + <code>gist</code> + <code>workflow</code></p>
+          <input id="settings-pat-input" type="password" class="modal-input" placeholder="ghp_xxxxxxxxxxxx" autocomplete="off">
+          <div class="modal-actions">
+            <button id="settings-test-btn"  class="modal-btn modal-btn-secondary">テスト</button>
+            <button id="settings-save-btn"  class="modal-btn modal-btn-primary">保存</button>
+            <button id="settings-clear-btn" class="modal-btn modal-btn-danger">削除</button>
+          </div>
+          <div id="settings-pat-status" class="settings-status"></div>
         </div>
-        <div id="settings-status" class="settings-status"></div>
+
+        <!-- AI Providers section -->
+        <div class="settings-section">
+          <div class="settings-section-title">外部AIプロバイダー</div>
+          <p class="modal-hint">APIキーを保存するとモデル選択に表示されます。削除すると非表示になります。</p>
+          <div id="settings-provider-list"></div>
+          <button id="settings-add-btn" class="modal-btn settings-add-btn">＋ カスタムプロバイダーを追加</button>
+          <div id="settings-custom-form" style="display:none;"></div>
+        </div>
+
       </div>
     </div>
   </div>

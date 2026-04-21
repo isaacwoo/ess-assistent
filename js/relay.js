@@ -160,17 +160,24 @@ const Relay = (() => {
   async function send(provider, model, messages, image) {
     cancelled = false;
 
-    // 只发送最近 10 条消息以控制大小
     const recentMessages = messages.slice(-10);
-
     const gistId = await findOrCreateRelayGist();
     const requestId = generateRequestId();
+
+    // Resolve provider definition for api_base and workflow type
+    const provDef = Providers.getProviderDef(provider);
+    const providerType = provDef ? (provDef.workflowType || 'openai') : 'openai';
+    const apiBase = provDef ? (provDef.apiBase || null) : null;
+    const apiKey  = Providers.getApiKey(provider);
 
     const payload = {
       status: 'pending',
       request_id: requestId,
       provider,
+      provider_type: providerType,
       model,
+      api_base: apiBase,
+      api_key:  apiKey,
       messages: recentMessages,
       image: image ? { data: image.data, mimeType: image.mimeType } : null,
       response: null,
